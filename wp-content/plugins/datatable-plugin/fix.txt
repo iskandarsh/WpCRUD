@@ -1,0 +1,152 @@
+<input type="hidden" name="id" value="<?php echo isset($_GET['edit_id']) ? $_GET['edit_id'] : ''; ?>">
+        <label for="title">Title:</label>
+        <input type="text" name="title" id="title" value="<?php echo isset($_GET['edit_id']) ? get_book_data($_GET['edit_id'])->title : ''; ?>" required>
+        <label for="author">Author:</label>
+        <input type="text" name="author" id="author" value="<?php echo isset($_GET['edit_id']) ? get_book_data($_GET['edit_id'])->author : ''; ?>" required>
+        <input type="submit" name="submit" value="Save">
+
+ 
+        <?php
+/**
+ * Plugin Name: DataTable Plugin
+ * Description: A simple plugin to display a DataTable on a page.
+ * Version: 1.0
+ */
+
+// Enqueue DataTables assets
+function datatable_plugin_enqueue_assets() {
+    wp_enqueue_script('jquery');
+    wp_enqueue_style('fomantic-ui-css', 'https://cdn.jsdelivr.net/npm/fomantic-ui-css/semantic.min.css');
+    wp_enqueue_script('fomantic-ui-js', 'https://cdn.jsdelivr.net/npm/fomantic-ui-css/semantic.min.js', array('jquery'), '', true);
+
+    wp_enqueue_style('datatables-css', 'https://cdn.datatables.net/1.10.25/css/jquery.dataTables.min.css');
+    wp_enqueue_script('datatables-js', 'https://cdn.datatables.net/1.10.25/js/jquery.dataTables.min.js', array('jquery'), '1.10.25', true);
+}
+
+add_action('wp_enqueue_scripts', 'datatable_plugin_enqueue_assets');
+
+// Create or update a book
+function save_book($data) {
+    global $wpdb;
+
+    if (isset($_POST['submit'])) {
+        $title = sanitize_text_field($_POST['title']);
+        $author = sanitize_text_field($_POST['author']);
+        
+        $photo = $_FILES['photo'];
+        $upload_dir = wp_upload_dir();
+        $target_dir = $upload_dir['path'] . '/';
+        $target_file = $target_dir . basename($photo['name']);
+        
+        if (move_uploaded_file($photo['tmp_name'], $target_file)) {
+            $photo_url = $upload_dir['url'] . '/' . basename($photo['name']);
+            $table_name = $wpdb->prefix . 'books'; // Use proper naming convention
+            $book_data = array(
+                'title' => $title,
+                'author' => $author,
+                'photo' => $photo_url,
+            );
+            $result_check = $wpdb->insert($table_name, $book_data);
+            if ($result_check) {
+                echo 'Entry added successfully!';
+            } else {
+                echo 'Failed to insert data: ' . $wpdb->last_error;
+            }
+        } else {
+            echo "Failed to upload photo.";
+        }
+    }
+}
+
+// Delete a book
+function delete_book($book_id) {
+    global $wpdb;
+
+    $table_name = $wpdb->prefix . 'books'; // Use proper naming convention
+    $wpdb->delete($table_name, array('id' => $book_id));
+}
+
+// Handle form submissions using WordPress hooks
+// function handle_form_submission() {
+    if (isset($_POST['submit'])) {
+        save_book($_POST);
+    }
+// }
+// add_action('admin_post_submit_form', 'handle_form_submission'); // Use proper action name
+
+// Handle delete action using WordPress hooks
+// function handle_delete_action() {
+    if (isset($_GET['action']) && $_GET['action'] === 'delete' && isset($_GET['id'])) {
+        $book_id = intval($_GET['id']);
+        delete_book($book_id);
+    }
+// }
+// add_action('admin_init', 'handle_delete_action');
+
+// Display the form and book list
+function custom_crud_display() {
+    ?>
+    <!-- Add your HTML form here -->
+    <form method="post" enctype="multipart/form-data">
+        <input type="hidden" name="id" value="<?php echo isset($_GET['edit_id']) ? $_GET['edit_id'] : ''; ?>">
+        <label for="title">Title:</label>
+        <input type="text" name="title" required>
+        
+        <label for="author">Author:</label>
+        <input type="text" name="author" required>
+        
+        <label for="photo">Photo:</label>
+        <input type="file" name="photo" accept="image/*" required>
+        
+        <input type="submit" name="submit" value="Add Entry">
+    </form>
+    <?php
+}
+
+// Shortcode to display the DataTable
+function datatable_shortcode($atts) {
+    // Example data for demonstration
+    global $wpdb;
+    $data = $wpdb->get_results("SELECT * FROM " . $wpdb->prefix . "books"); // Use proper table name
+
+    custom_crud_display();
+
+    // Table header
+    $header = array('ID', 'Title', 'Author', 'Photo Url', 'Photo IMG', 'Action');
+
+    // Generate table HTML
+    $table_html = '<table id="datatable" class="ui celled table"><thead><tr>';
+
+    foreach ($header as $header_item) {
+        $table_html .= '<th>' . esc_html($header_item) . '</th>';
+    }
+
+    $table_html .= '</tr></thead><tbody>';
+
+    foreach ($data as $row) {
+        $table_html .= '<tr>';
+        foreach ($row as $cell) {
+            $table_html .= '<td>' . esc_html($cell) . '</td>';
+        }
+        $table_html .= '
+        <td><img src="' . esc_url($row->photo) . '" alt="Book Cover" width="100" height="100"></td>
+        <td>
+            <a href="?action=edit&id=' . esc_attr($row->id) . '">Edit</a>
+            <a href="?action=delete&id=' . esc_attr($row->id) . '">Delete</a>
+        </td>';
+        $table_html .= '</tr>';
+    }
+
+    $table_html .= '</tbody></table>';
+
+    // JavaScript to initialize DataTables
+    $script = '
+    <script>
+        jQuery(document).ready(function($) {
+            $("#datatable").DataTable();
+        });
+    </script>';
+
+    return $table_html . $script;
+}
+add_shortcode('datatable_plugin', 'datatable_shortcode');
